@@ -31,7 +31,16 @@
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
 
-[Gates determined based on constitution file]
+Verify each gate against `.specify/memory/constitution.md` (v1.0.0+):
+
+| Gate | Principle | Passing Condition |
+|------|-----------|-------------------|
+| Security review | I. Security-First | All kernel/netns/unsafe touchpoints identified; safe defaults confirmed for all new config options |
+| Code quality | II. Code Quality | Public API documented; no `unwrap`/`expect` in library code without justification; `unsafe` scoped and commented |
+| Test coverage | III. Test-Driven Dev | Unit tests planned without live-kernel dependency; integration tests gated; error paths included |
+| Ecosystem compat | IV. Ecosystem Compatibility | Netavark plugin contract respected; setup/teardown is idempotent; no interference with unowned networks |
+| Simplicity | V. Simplicity | Each new module has a single stated responsibility; no speculative features; complexity violations documented below |
+| Crate governance | VI. Monorepo & Crate Governance | New crates added to workspace; dependency direction acyclic; shared types in library crate |
 
 ## Project Structure
 
