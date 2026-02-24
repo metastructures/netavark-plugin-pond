@@ -14,22 +14,61 @@ use super::options::PondOptions;
 use super::tuning;
 
 /// All parameters needed to fully provision one pod network.
+///
+/// Constructed by [`NetNsDriver::setup`][super::driver::NetNsDriver] from the
+/// netavark `NetworkPluginExec` payload and passed to [`provision`].
 pub struct ProvisionParams<'a> {
+    /// Validated driver options for this network.
     pub options: &'a PondOptions,
-    /// Path to the infra container's network namespace (e.g. /proc/<pid>/ns/net).
+    /// Path to the infra container's network namespace (e.g. `/proc/<pid>/ns/net`).
     pub netns_path: &'a str,
+    /// Unique network ID from the netavark state store; written to OVS `external_ids`.
     pub network_id: &'a str,
+    /// Human-readable network name; written to OVS `external_ids`.
     pub network_name: &'a str,
-    /// Interface name inside the container (from PerNetworkOptions.interface_name).
+    /// Interface name inside the container (from `PerNetworkOptions.interface_name`,
+    /// e.g. `eth0`).
     pub interface_name: &'a str,
-    /// Host IP with prefix length, e.g. 10.1.0.2/29.
+    /// IP address with prefix length assigned to the inner veth interface, e.g. `10.1.0.2/29`.
     pub host_ipnet: IpNet,
-    /// Default gateway for the container.
+    /// Default gateway written as an IPv4 route inside the container netns.
     pub gateway: IpAddr,
 }
 
 /// Create the veth pair, configure the container netns, and register the
-/// upstream end with OVS. Returns a StatusBlock for netavark.
+/// upstream end with OVS.
+///
+/// This is the core provisioning routine. It performs all netlink and
+/// external-binary operations needed to bring up the network for a single pod:
+///
+/// 1. Opens netlink sockets for both the host netns and the container netns
+///    at `params.netns_path`.
+/// 2. Creates the veth pair atomically: the upstream end lands in the host netns
+///    with name `options.upstream`; the inner end is placed directly into the
+///    container netns with name `params.interface_name` (no rename needed).
+/// 3. Assigns `params.host_ipnet` to the inner interface and adds a default
+///    route via `params.gateway`.
+/// 4. Brings both interfaces up and reads the inner MAC address.
+/// 5. Calls [`tuning::set_min_port`] to write `options.min_port` to
+///    `net.ipv4.ip_unprivileged_port_start` inside the container netns.
+/// 6. Calls [`tuning::disable_offloads`] to turn off TX/SG/TSO via ethtool.
+/// 7. Invokes `ovs-vsctl add-port` to attach the upstream to the OVS bridge
+///    with VLAN tagging and `external_ids` metadata. On failure the veth is
+///    deleted before the error is returned.
+///
+/// Returns a [`types::StatusBlock`] containing the inner MAC address and the
+/// assigned subnet/gateway, which netavark stores in its state for the
+/// container.
+///
+/// # Idempotency
+///
+/// If the upstream interface already exists the function short-circuits and
+/// returns the current state via [`existing_status_block`].
+///
+/// # Errors
+///
+/// Any netlink error, failed sysctl write, ethtool failure, or non-zero
+/// `ovs-vsctl` exit code is propagated as a boxed error.
 pub fn provision(
     params: &ProvisionParams,
 ) -> Result<types::StatusBlock, Box<dyn std::error::Error>> {
@@ -161,8 +200,23 @@ pub fn provision(
     })
 }
 
-/// Remove the upstream port from OVS and delete the veth pair.
-/// Both operations are non-fatal if the resource is already gone.
+/// Remove the upstream OVS port and delete the veth pair.
+///
+/// Performs teardown in two steps:
+///
+/// 1. `ovs-vsctl del-port <bridge> <upstream>` — non-fatal: a warning is
+///    printed if the port is already absent or if `ovs-vsctl` is unavailable.
+/// 2. `del_link(<upstream>)` via a host-side netlink socket — non-fatal on
+///    `ENODEV` (the kernel automatically removes the inner veth when the outer
+///    is deleted or when the container netns is torn down).
+///
+/// Passing `/proc/self/ns/net` to `open_netlink_sockets` gives two host-side
+/// sockets, which is safe when the container netns may no longer exist.
+///
+/// # Errors
+///
+/// Returns an error only if `del_link` fails for a reason other than the
+/// interface already being gone.
 pub fn deprovision(options: &PondOptions) -> Result<(), Box<dyn std::error::Error>> {
     // OVS del-port (non-fatal if port already absent).
     let ovs_out = Command::new("ovs-vsctl")

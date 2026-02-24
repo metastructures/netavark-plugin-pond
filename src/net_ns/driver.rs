@@ -9,10 +9,45 @@ use super::options::PondOptions;
 use super::plumbing::{self, ProvisionParams};
 use crate::constants::PLUGIN_VERSION;
 
+/// The netavark driver for the `pond-netns` network type.
+///
+/// Implements the three lifecycle hooks that netavark calls when managing a
+/// network of driver type `pond-netns`:
+///
+/// * [`create`][Plugin::create] — validate options and persist a normalized
+///   `Network` object in the netavark state store.
+/// * [`setup`][Plugin::setup] — provision the veth pair, configure the
+///   container netns, and register the upstream end with OVS.
+/// * [`teardown`][Plugin::teardown] — remove the OVS port and delete the veth.
+///
+/// See the [crate-level documentation](crate) for a high-level overview.
 #[derive(Default)]
 pub struct NetNsDriver {}
 
 impl Plugin for NetNsDriver {
+    /// Validate the network definition and return a normalized `Network`.
+    ///
+    /// Called by `podman network create`. No kernel resources are created at
+    /// this point — provisioning happens in [`setup`][Self::setup].
+    ///
+    /// # What this does
+    ///
+    /// * Parses and validates all driver options via private `PondOptions::from_network`.
+    /// * Verifies that at least one subnet is present.
+    /// * Returns a normalized `Network` with:
+    ///   - `internal = true` (OVS-connected pods are not expected to reach the
+    ///     host's default route through this interface)
+    ///   - `dns_enabled = false`
+    ///   - `ipv6_enabled = false`
+    ///   - `ipam_options` set to `host-local` so netavark assigns IPs from the
+    ///     configured subnet
+    ///   - `network_interface` set to the upstream veth name so [`teardown`][Self::teardown]
+    ///     can recover it without re-parsing options
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if required options (`bridge`, `vlan`) are missing or
+    /// invalid, if `upstream` exceeds 15 characters, or if no subnet is given.
     fn create(
         &self,
         network: types::Network,
@@ -50,6 +85,40 @@ impl Plugin for NetNsDriver {
         })
     }
 
+    /// Provision networking for the infra container of a pod.
+    ///
+    /// Called by netavark when the infra (pause) container is started. In pod
+    /// mode all other containers share the infra container's network namespace
+    /// and do not trigger additional `setup` calls.
+    ///
+    /// # What this does (in order)
+    ///
+    /// 1. Creates a veth pair atomically: upstream end in the host netns,
+    ///    inner end placed directly into `netns` with the name from
+    ///    `PerNetworkOptions.interface_name` (e.g. `eth0`).
+    /// 2. Assigns the IP address from `static_ips[0]` with the subnet prefix
+    ///    length to the inner interface.
+    /// 3. Adds a default IPv4 route via the configured gateway.
+    /// 4. Brings both ends up.
+    /// 5. Sets `net.ipv4.ip_unprivileged_port_start` inside the container
+    ///    netns using `setns` + procfs write.
+    /// 6. Disables TX checksumming, scatter-gather, and TSO on the inner
+    ///    interface via `nsenter` + `ethtool` (required for correct behaviour
+    ///    with most user-space data planes).
+    /// 7. Adds the upstream interface to the OVS bridge as an access port with
+    ///    the configured VLAN tag and `external_ids` metadata.
+    ///
+    /// # Idempotency
+    ///
+    /// If the upstream interface already exists the function logs a warning and
+    /// returns the existing state. This guards against duplicate calls but
+    /// should not occur in normal pod operation.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if any netlink operation, sysctl write, ethtool call,
+    /// or `ovs-vsctl add-port` fails. On OVS failure the veth pair is deleted
+    /// before the error is propagated.
     fn setup(
         &self,
         netns: String,
@@ -100,6 +169,19 @@ impl Plugin for NetNsDriver {
         plumbing::provision(&params)
     }
 
+    /// Remove the OVS port and delete the veth pair.
+    ///
+    /// Called by netavark when the pod is stopped or the network is removed.
+    /// Both operations are non-fatal if the resource is already absent, making
+    /// teardown safe to retry.
+    ///
+    /// The container netns may no longer be reachable at this point; deleting
+    /// the upstream veth automatically removes the inner end as well.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error only if the `del_link` netlink call fails for a reason
+    /// other than the interface already being gone.
     fn teardown(
         &self,
         _netns: String,

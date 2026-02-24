@@ -19,7 +19,21 @@ fn build_ethtool_args(netns_path: &str, iface: &str) -> Vec<String> {
 }
 
 /// Disable TX checksumming, scatter-gather, and TSO on `iface` inside the
-/// network namespace at `netns_path` using `nsenter` + `ethtool`.
+/// network namespace at `netns_path`.
+///
+/// Equivalent to:
+/// ```bash
+/// nsenter --net=<netns_path> ethtool --offload <iface> tx off sg off tso off
+/// ```
+///
+/// These offloads must be disabled for correct behaviour with most user-space
+/// data planes (OVS-DPDK, DPDK vhost, memif, etc.) that do not implement the
+/// corresponding NIC features.
+///
+/// # Errors
+///
+/// Returns an error if `nsenter` or `ethtool` is not found, or if
+/// `ethtool --offload` exits with a non-zero status.
 pub fn disable_offloads(netns_path: &str, iface: &str) -> Result<(), Box<dyn std::error::Error>> {
     // See build_ethtool_args for testable argument construction.
     let out = Command::new("nsenter")
@@ -41,10 +55,28 @@ fn format_port_value(port: u16) -> String {
 }
 
 /// Set `net.ipv4.ip_unprivileged_port_start` inside the container network
-/// namespace at `netns_path` to `port`.
+/// namespace to `port`.
 ///
-/// Enters the netns via `nix::sched::setns`, writes to procfs, then returns
-/// to the host netns. Safe because the plugin binary is single-threaded.
+/// Lowers the minimum port number that unprivileged processes inside the
+/// container may bind. The default Linux value is `1024`; setting it to a
+/// lower value (e.g. `80`) allows containers running as non-root to bind
+/// privileged ports directly.
+///
+/// # Implementation
+///
+/// Uses `nix::sched::setns` to enter the container netns identified by
+/// `netns_path`, writes the decimal port value to
+/// `/proc/sys/net/ipv4/ip_unprivileged_port_start`, then calls `setns` again
+/// to return to the host netns. The return to host netns is attempted even if
+/// the write fails.
+///
+/// This approach is safe because the plugin binary is single-threaded; `setns`
+/// on a multi-threaded process would affect all threads.
+///
+/// # Errors
+///
+/// Returns an error if the netns file cannot be opened, if `setns` into the
+/// container netns fails, or if the procfs write fails.
 pub fn set_min_port(netns_path: &str, port: u16) -> Result<(), Box<dyn std::error::Error>> {
     // Save a reference to the host netns before entering the container's.
     let host_ns =

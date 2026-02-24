@@ -1,7 +1,25 @@
 use netavark::network::types::Network;
 use std::collections::HashMap;
 
-/// Parsed and validated options for the pond-netns driver.
+/// Parsed and validated driver options for a `pond-netns` network.
+///
+/// Built from the `options` map that Podman stores in the `Network` object.
+/// Use [`PondOptions::from_network`] to construct and validate an instance.
+///
+/// # Required options (set with `podman network create --option key=value`)
+///
+/// | Key | Description |
+/// |-----|-------------|
+/// | `bridge` | Name of the pre-existing OVS bridge (e.g. `ovsbr0`) |
+/// | `vlan` | 802.1Q VLAN ID for the access port (1–4094) |
+///
+/// # Optional options
+///
+/// | Key | Default | Description |
+/// |-----|---------|-------------|
+/// | `upstream` | derived | Host-side veth name (max 15 chars); derived as `pond<crc32hex(name)>` if omitted |
+/// | `min_port` | `1024` | Value written to `net.ipv4.ip_unprivileged_port_start` inside the container netns |
+/// | `mtu` | `1500` | MTU applied to both ends of the veth pair |
 #[derive(Debug)]
 pub struct PondOptions {
     /// Name of the pre-existing OVS bridge.
@@ -17,6 +35,21 @@ pub struct PondOptions {
 }
 
 impl PondOptions {
+    /// Parse and validate driver options from a netavark [`Network`] object.
+    ///
+    /// Reads the `network.options` map and applies the following rules:
+    ///
+    /// * `bridge` — required; must be non-empty.
+    /// * `vlan` — required; must parse as a `u16` in the range 1–4094.
+    /// * `upstream` — optional; if provided must be ≤ 15 bytes (Linux `IFNAMSIZ`
+    ///   limit). If absent the name is derived deterministically from the network
+    ///   name using `pond<crc32hex(name)>` (always 12 characters).
+    /// * `min_port` — optional `u16`; defaults to `1024`.
+    /// * `mtu` — optional `u32`; defaults to `1500`.
+    ///
+    /// # Errors
+    ///
+    /// Returns a descriptive error string for any missing or invalid option.
     pub fn from_network(network: &Network) -> Result<Self, Box<dyn std::error::Error>> {
         let empty = HashMap::new();
         let opts = network.options.as_ref().unwrap_or(&empty);
