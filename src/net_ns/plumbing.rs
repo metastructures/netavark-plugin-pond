@@ -204,26 +204,33 @@ pub fn deprovision(options: &PondOptions) -> Result<(), Box<dyn std::error::Erro
 
 // --- helpers ---
 
+// Extracted for unit-testability: returns the ovs-vsctl argument list so tests can
+// assert on argument structure without spawning a process.
+fn build_ovs_add_port_args(params: &ProvisionParams) -> Vec<String> {
+    vec![
+        "add-port".to_string(),
+        params.options.bridge.clone(),
+        params.options.upstream.clone(),
+        "--".to_string(),
+        "set".to_string(),
+        "port".to_string(),
+        params.options.upstream.clone(),
+        format!("tag={}", params.options.vlan),
+        "vlan_mode=access".to_string(),
+        "--".to_string(),
+        "set".to_string(),
+        "interface".to_string(),
+        params.options.upstream.clone(),
+        format!("external_ids:network_id={}", params.network_id),
+        format!("external_ids:network_name={}", params.network_name),
+        "external_ids:driver=pond-netns".to_string(),
+    ]
+}
+
 fn ovs_add_port(params: &ProvisionParams) -> Result<(), Box<dyn std::error::Error>> {
+    // See build_ovs_add_port_args for testable argument construction.
     let out = Command::new("ovs-vsctl")
-        .args([
-            "add-port",
-            &params.options.bridge,
-            &params.options.upstream,
-            "--",
-            "set",
-            "port",
-            &params.options.upstream,
-            &format!("tag={}", params.options.vlan),
-            "vlan_mode=access",
-            "--",
-            "set",
-            "interface",
-            &params.options.upstream,
-            &format!("external_ids:network_id={}", params.network_id),
-            &format!("external_ids:network_name={}", params.network_name),
-            "external_ids:driver=pond-netns",
-        ])
+        .args(build_ovs_add_port_args(params))
         .output()
         .map_err(|e| format!("ovs-vsctl not found: {}", e))?;
 
@@ -275,4 +282,96 @@ fn existing_status_block(
         dns_search_domains: None,
         interfaces: Some(interfaces),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use netlink_packet_route::link::LinkMessage;
+
+    fn make_link_with_mac(mac: [u8; 6]) -> LinkMessage {
+        let mut msg = LinkMessage::default();
+        msg.attributes.push(LinkAttribute::Address(mac.to_vec()));
+        msg
+    }
+
+    // --- extract_mac ---
+
+    #[test]
+    fn extract_mac_returns_hex_string_for_known_address() {
+        let link = make_link_with_mac([0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff]);
+        assert_eq!(extract_mac(&link), "aa:bb:cc:dd:ee:ff");
+    }
+
+    #[test]
+    fn extract_mac_returns_empty_when_no_address_attribute() {
+        let msg = LinkMessage::default();
+        assert_eq!(extract_mac(&msg), "");
+    }
+
+    // --- build_ovs_add_port_args ---
+
+    fn make_provision_params() -> (super::super::options::PondOptions, String, String) {
+        let opts = super::super::options::PondOptions {
+            bridge: "ovsbr0".to_string(),
+            vlan: 100,
+            upstream: "pod0up".to_string(),
+            min_port: 1024,
+            mtu: 1500,
+        };
+        (opts, "net-id-123".to_string(), "mynet".to_string())
+    }
+
+    #[test]
+    fn ovs_add_port_args_contains_add_port_bridge_and_upstream() {
+        let (opts, network_id, network_name) = make_provision_params();
+        let params = ProvisionParams {
+            options: &opts,
+            netns_path: "/proc/1/ns/net",
+            network_id: &network_id,
+            network_name: &network_name,
+            interface_name: "eth0",
+            host_ipnet: "10.1.0.2/29".parse().unwrap(),
+            gateway: "10.1.0.1".parse().unwrap(),
+        };
+        let args = build_ovs_add_port_args(&params);
+        assert!(args.contains(&"add-port".to_string()));
+        assert!(args.contains(&"ovsbr0".to_string()));
+        assert!(args.contains(&"pod0up".to_string()));
+    }
+
+    #[test]
+    fn ovs_add_port_args_contains_vlan_and_mode() {
+        let (opts, network_id, network_name) = make_provision_params();
+        let params = ProvisionParams {
+            options: &opts,
+            netns_path: "/proc/1/ns/net",
+            network_id: &network_id,
+            network_name: &network_name,
+            interface_name: "eth0",
+            host_ipnet: "10.1.0.2/29".parse().unwrap(),
+            gateway: "10.1.0.1".parse().unwrap(),
+        };
+        let args = build_ovs_add_port_args(&params);
+        assert!(args.contains(&"tag=100".to_string()));
+        assert!(args.contains(&"vlan_mode=access".to_string()));
+    }
+
+    #[test]
+    fn ovs_add_port_args_contains_all_external_ids() {
+        let (opts, network_id, network_name) = make_provision_params();
+        let params = ProvisionParams {
+            options: &opts,
+            netns_path: "/proc/1/ns/net",
+            network_id: &network_id,
+            network_name: &network_name,
+            interface_name: "eth0",
+            host_ipnet: "10.1.0.2/29".parse().unwrap(),
+            gateway: "10.1.0.1".parse().unwrap(),
+        };
+        let args = build_ovs_add_port_args(&params);
+        assert!(args.contains(&"external_ids:network_id=net-id-123".to_string()));
+        assert!(args.contains(&"external_ids:network_name=mynet".to_string()));
+        assert!(args.contains(&"external_ids:driver=pond-netns".to_string()));
+    }
 }
