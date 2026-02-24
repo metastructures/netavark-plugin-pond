@@ -1,23 +1,25 @@
 {
-    "name": "example1",
+    "name": "test-application",
     "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
     "driver": "pond-netns",
-    "network_interface": "enp1",
+    "network_interface": "pond4a3f1234",
     "subnets": [
         {
-            "subnet": "10.0.0.0/16",
-            "gateway": "10.0.0.1"
+            "subnet": "10.1.0.0/29",
+            "gateway": "10.1.0.1"
         }
     ],
     "ipv6_enabled": false,
-    "internal": false,
+    "internal": true,
     "dns_enabled": false,
     "ipam_options": {
         "driver": "host-local"
     },
     "options": {
-        "pod_name": "test",
-        "pod_network": "test-netns",
-        "custom": "opt"
+        "bridge": "ovsbr0",
+        "vlan": "100",
+        "upstream": "pond4a3f1234",
+        "min_port": "1024",
+        "mtu": "1500"
     }
 }

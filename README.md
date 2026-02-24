@@ -58,6 +58,67 @@ ExecStopPost=-ip netns del ${POD_NETWORK}
 WantedBy=default.target
 ```
 
+## Usage
+
+### Network creation
+
+```bash
+podman network create \
+  --driver pond-netns \
+  --subnet 10.1.0.0/29 \
+  --gateway 10.1.0.1 \
+  --option bridge=ovsbr0 \
+  --option vlan=100 \
+  --option upstream=pod0up \
+  --option min_port=1024 \
+  my-pod-network
+```
+
+**Required options:**
+- `bridge` — name of the pre-existing OVS bridge (e.g. `ovsbr0`)
+- `vlan` — VLAN ID for the access port (1–4094)
+
+**Optional options:**
+- `upstream` — host-side veth name (default: `pond<crc32(network-name)>`, max 15 chars)
+- `min_port` — `net.ipv4.ip_unprivileged_port_start` inside the container (default: `1024`)
+- `mtu` — MTU for the veth pair (default: `1500`)
+
+**Runtime dependencies on the host:**
+- `ovs-vsctl` (Open vSwitch package) — OVS port management
+- `ethtool` — TX offload disabling on the container interface
+- `nsenter` (util-linux) — entering the container netns for ethtool
+
+### Pod networking
+
+```bash
+podman pod create --network my-pod-network mypod
+podman run --pod mypod --name sidecar1 myimage
+podman run --pod mypod --name sidecar2 myimage
+```
+
+All containers in the pod share the infra container's network namespace, which
+has a single `eth0` interface connected via veth to OVS.
+
+### What the plugin replaces
+
+The plugin automates all `ExecStartPre`/`ExecStopPost` lines from the systemd
+unit in the Example target section above:
+
+| Systemd command | Plugin phase |
+|---|---|
+| `ip link add … type veth peer name …` | `setup` — `create_link` via netlink |
+| `ip link set … netns …` | `setup` — veth peer created directly in container netns |
+| `ip addr add … dev …` | `setup` — `add_addr` via netlink |
+| `ip route add default via …` | `setup` — `add_route` via netlink |
+| `ethtool --offload … tx off sg off tso off` | `setup` — `nsenter` + `ethtool` |
+| `sysctl net.ipv4.ip_unprivileged_port_start=…` | `setup` — `setns` + procfs write |
+| `ovs-vsctl add-port … tag=… vlan_mode=access …` | `setup` — `ovs-vsctl` with metadata |
+| `ovs-vsctl del-port …` | `teardown` |
+| `ip link del …` | `teardown` — `del_link` via netlink |
+
+Loopback (`lo` up, `127.0.0.1/8`) is handled by netavark and the OCI runtime
+before the plugin is called.
+
 ## Installation
 
 ### Cargo

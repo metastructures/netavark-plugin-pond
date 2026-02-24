@@ -7,8 +7,10 @@ repository = "https://github.com/caguado/netavark-plugin-pond"
 license = "Apache-2.0"
 
 [dependencies]
+crc32fast = "1.4"
 ipnet = "2.9.0"
 netavark = "1.10.3"
 netlink-packet-core = "0.8.1"
 netlink-packet-route = "0.25.1"
 netlink-sys = "0.8.5"
+nix = { version = "0.29", features = ["sched"] }

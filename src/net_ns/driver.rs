@@ -1,13 +1,13 @@
+use std::collections::HashMap;
+use std::net::IpAddr;
+
+use ipnet::IpNet;
+use netavark::network::types;
+use netavark::plugin::{Info, Plugin, PluginExec, API_VERSION};
+
+use super::options::PondOptions;
+use super::plumbing::{self, ProvisionParams};
 use crate::constants::PLUGIN_VERSION;
-use netavark::{
-    network::{
-        core_utils::{open_netlink_sockets, CoreUtils},
-        netlink_route, types,
-    },
-    plugin::{Info, Plugin, PluginExec, API_VERSION},
-};
-use netlink_packet_route::{address::AddressAttribute, link::LinkAttribute};
-use std::{collections::HashMap, os::fd::AsFd};
 
 #[derive(Default)]
 pub struct NetNsDriver {}
@@ -17,36 +17,37 @@ impl Plugin for NetNsDriver {
         &self,
         network: types::Network,
     ) -> Result<types::Network, Box<dyn std::error::Error>> {
-        // TODO: validate that the options we expect are present
-        let mut options = HashMap::from([("isolate".to_string(), "true".to_string())]);
-        if let Some(opts) = network.options {
-            options.extend(opts)
+        // Validate required options and subnet.
+        let options = PondOptions::from_network(&network)?;
+
+        if network
+            .subnets
+            .as_ref()
+            .map(|s| s.is_empty())
+            .unwrap_or(true)
+        {
+            return Err("at least one subnet must be specified (use --subnet)".into());
         }
 
-        let network_interface = match network.network_interface.as_deref() {
-            // TODO: validate that the iface to use does not exist
-            Some(_) => Some("relayed0".to_string()),
-            None => Some("podnull0".to_string()),
-        };
-
-        let normalized_network = types::Network {
+        Ok(types::Network {
             driver: network.driver,
             id: network.id,
             name: network.name,
-            network_interface,
-            options: Some(options),
+            // network_interface carries the upstream veth name so teardown
+            // can recover it without re-parsing options.
+            network_interface: Some(options.upstream),
+            options: network.options,
             internal: true,
-            ipv6_enabled: true,
+            ipv6_enabled: false,
             dns_enabled: false,
-            ipam_options: Some(HashMap::default()),
-            subnets: Some(vec![]),
+            ipam_options: Some(HashMap::from([(
+                "driver".to_string(),
+                "host-local".to_string(),
+            )])),
+            subnets: network.subnets,
             routes: Some(vec![]),
             network_dns_servers: Some(vec![]),
-        };
-
-        println!("TODO: create the actual shared namespace");
-
-        Ok(normalized_network)
+        })
     }
 
     fn setup(
@@ -54,83 +55,64 @@ impl Plugin for NetNsDriver {
         netns: String,
         opts: types::NetworkPluginExec,
     ) -> Result<types::StatusBlock, Box<dyn std::error::Error>> {
-        let (mut host, netns) = open_netlink_sockets(&netns)?;
+        let options = PondOptions::from_network(&opts.network)?;
 
-        let name = opts.network.network_interface.unwrap_or_default();
+        // Extract IP configuration from the network and per-container options.
+        let subnets = opts
+            .network
+            .subnets
+            .as_ref()
+            .filter(|s| !s.is_empty())
+            .ok_or("no subnets configured in network")?;
+        let first_subnet = &subnets[0];
 
-        let link = host
-            .netlink
-            .get_link(netlink_route::LinkID::Name(name.clone()))?;
+        let gateway = first_subnet
+            .gateway
+            .ok_or("no gateway configured in subnet")?;
+        let prefix_len = first_subnet.subnet.prefix_len();
 
-        let mut mac_address = String::from("");
-        for nla in link.attributes {
-            if let LinkAttribute::Address(ref addr) = nla {
-                mac_address = CoreUtils::encode_address_to_hex(addr);
-            }
-        }
+        let static_ips = opts
+            .network_options
+            .static_ips
+            .as_ref()
+            .filter(|ips| !ips.is_empty())
+            .ok_or(
+                "no static IPs assigned — pond-netns requires pod mode \
+                 (podman pod create --network <name>)",
+            )?;
+        let host_ip: IpAddr = static_ips[0];
 
-        let addresses = host.netlink.dump_addresses(None)?;
-        let mut subnets = Vec::new();
-        for address in addresses {
-            if address.header.index == link.header.index {
-                for nla in address.attributes {
-                    if let AddressAttribute::Address(ip) = &nla {
-                        let net = ipnet::IpNet::new(*ip, address.header.prefix_len)?;
-                        subnets.push(types::NetAddress {
-                            gateway: None,
-                            ipnet: net,
-                        })
-                    }
-                }
-            }
-        }
+        let host_ipnet =
+            IpNet::new(host_ip, prefix_len).map_err(|e| format!("invalid IP/prefix: {}", e))?;
 
-        host.netlink
-            .set_link_ns(link.header.index, netns.file.as_fd())?;
+        let interface_name = opts.network_options.interface_name.clone();
 
-        // interfaces map, but we only ever expect one, for response
-        let mut interfaces: HashMap<String, types::NetInterface> = HashMap::new();
-
-        let interface = types::NetInterface {
-            mac_address,
-            subnets: Option::from(subnets),
-        };
-        interfaces.insert(name, interface);
-
-        //  StatusBlock response
-        let response = types::StatusBlock {
-            dns_server_ips: None,
-            dns_search_domains: None,
-            interfaces: Some(interfaces),
+        let params = ProvisionParams {
+            options: &options,
+            netns_path: &netns,
+            network_id: &opts.network.id,
+            network_name: &opts.network.name,
+            interface_name: &interface_name,
+            host_ipnet,
+            gateway,
         };
 
-        Ok(response)
+        plumbing::provision(&params)
     }
 
     fn teardown(
         &self,
-        netns: String,
+        _netns: String,
         opts: types::NetworkPluginExec,
     ) -> Result<(), Box<dyn std::error::Error>> {
-        // on teardown revert what was done in setup
-        let (host, mut netns) = open_netlink_sockets(&netns)?;
-
-        let name = opts.network.network_interface.unwrap_or_default();
-
-        let link = netns.netlink.get_link(netlink_route::LinkID::Name(name))?;
-
-        netns
-            .netlink
-            .set_link_ns(link.header.index, host.file.as_fd())?;
-
-        Ok(())
+        let options = PondOptions::from_network(&opts.network)?;
+        plumbing::deprovision(&options)
     }
 }
 
 impl From<NetNsDriver> for PluginExec<NetNsDriver> {
     fn from(value: NetNsDriver) -> Self {
         let info = Info::new(PLUGIN_VERSION.to_owned(), API_VERSION.to_owned(), None);
-
         PluginExec::new(value, info)
     }
 }

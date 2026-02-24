@@ -1,0 +1,40 @@
+{
+    "container_id": "752947ff91f961eb3cb47ffe9315016979f3ffbec09e4d96a4fae3fb03391697",
+    "container_name": "test-application-infra",
+    "port_mappings": null,
+    "network": {
+        "dns_enabled": false,
+        "driver": "pond-netns",
+        "id": "2f259bab93aaaaa2542ba43ef33eb990d0999ee1b9924b557b7be53c0b7a1bb9",
+        "internal": true,
+        "ipv6_enabled": false,
+        "name": "test-application",
+        "network_interface": "pond4a3f1234",
+        "options": {
+            "bridge": "ovsbr0",
+            "vlan": "100",
+            "upstream": "pond4a3f1234",
+            "min_port": "1024",
+            "mtu": "1500"
+        },
+        "ipam_options": {
+            "driver": "host-local"
+        },
+        "subnets": [
+            {
+                "gateway": "10.1.0.1",
+                "lease_range": null,
+                "subnet": "10.1.0.0/29"
+            }
+        ],
+        "network_dns_servers": null
+    },
+    "network_options": {
+        "aliases": null,
+        "interface_name": "eth0",
+        "static_ips": [
+            "10.1.0.2"
+        ],
+        "static_mac": null
+    }
+}
