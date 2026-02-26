@@ -121,11 +121,15 @@ before the plugin is called.
 
 ## Installation
 
-### Cargo
+For full instructions — development build, release build, plugin registration
+in netavark/podman, and a packaging file manifest — see [INSTALL.md](INSTALL.md).
 
-* Install the rust toolchain in order to have cargo installed by following
-  [this](https://www.rust-lang.org/tools/install) guide.
-* run `cargo install netavark-plugin-pond`
+### Quick install from crates.io
+
+```shell
+cargo install netavark-plugin-pond
+install -D -m 0755 ~/.cargo/bin/pond-netns /usr/libexec/netavark/pond-netns
+```
 
 ## License
 
