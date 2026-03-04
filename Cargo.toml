@@ -9,7 +9,7 @@ license = "Apache-2.0"
 [dependencies]
 crc32fast = "1.4"
 ipnet = "2.12.0"
-netavark = "1.10.3"
+netavark = "1.17.2"
 netlink-packet-core = "0.8.1"
 netlink-packet-route = "0.25.1"
 netlink-sys = "0.8.5"
