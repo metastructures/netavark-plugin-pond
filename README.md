@@ -67,10 +67,10 @@ podman network create \
   --driver pond-netns \
   --subnet 10.1.0.0/29 \
   --gateway 10.1.0.1 \
-  --option bridge=ovsbr0 \
-  --option vlan=100 \
-  --option upstream=pod0up \
-  --option min_port=1024 \
+  --opt bridge=ovsbr0 \
+  --opt vlan=100 \
+  --opt upstream=pod0up \
+  --opt min_port=1024 \
   my-pod-network
 ```
 

@@ -129,6 +129,15 @@ pub fn provision(
             )
         })?;
 
+    // Bring the inner interface UP before adding the default route.
+    // The kernel only considers an interface's connected routes active when the
+    // interface is UP. If set_up were called after add_route, the gateway would
+    // be unreachable at route-install time and the kernel would return ENETUNREACH.
+    container
+        .netlink
+        .set_up(netlink_route::LinkID::ID(inner.header.index))
+        .map_err(|e| format!("set {} up: {}", params.interface_name, e))?;
+
     // Default route — IPv4 only (IPv6 is a non-goal).
     match (params.host_ipnet, params.gateway) {
         (IpNet::V4(_), IpAddr::V4(gw)) => {
@@ -144,11 +153,6 @@ pub fn provision(
         }
         _ => return Err("IPv6 is not supported by this driver".into()),
     }
-
-    container
-        .netlink
-        .set_up(netlink_route::LinkID::ID(inner.header.index))
-        .map_err(|e| format!("set {} up: {}", params.interface_name, e))?;
 
     // --- Read inner MAC after it's up ---
     let inner_up = container
