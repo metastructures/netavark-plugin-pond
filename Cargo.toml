@@ -1,6 +1,6 @@
 [package]
 name = "netavark-plugin-pond"
-version = "0.1.2"
+version = "1.0.0"
 edition = "2021"
 description = "Netavark plugin to create a custom network whose backing underlay is just a kernel namespace with the objective that all containers share the same network infrastructure. This is simpler than the usual bridged broadcast domain where different containers share a single network interface."
 repository = "https://github.com/metastructures/netavark-plugin-pond"
@@ -23,3 +23,9 @@ lto = "fat"
 codegen-units = 1
 strip = "symbols"
 panic = "abort"
+
+[package.metadata.cross.build]
+pre-build = [
+  "dpkg --add-architecture $CROSS_DEB_ARCH",
+  "apt-get update && apt-get --assume-yes install protobuf-compiler:$CROSS_DEB_ARCH libprotobuf-dev:$CROSS_DEB_ARCH",
+]

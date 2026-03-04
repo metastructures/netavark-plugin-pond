@@ -18,6 +18,10 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install Protoc
+        run: |
+          sudo apt-get update
+          sudo apt-get -y install protobuf-compiler libprotobuf-dev
       - name: Check formatting
         run: cargo fmt --all --check
       - name: Clippy

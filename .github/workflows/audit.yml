@@ -5,13 +5,21 @@ on:
     # Runs at 00:00 UTC every Monday
     - cron: '0 0 * * 1'
   push:
+    branches:
+      - main
     paths:
       - '**/Cargo.toml'
       - '**/Cargo.lock'
   pull_request:
+    branches:
+      - main
 
 jobs:
   audit:
+    permissions:
+      checks: write
+      contents: read
+      issues: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository

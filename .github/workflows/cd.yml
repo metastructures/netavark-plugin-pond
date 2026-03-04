@@ -6,7 +6,6 @@ on:
       - 'v[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-
   create-release:
     name: Create release
     runs-on: ubuntu-latest
@@ -56,15 +55,13 @@ jobs:
           target: ${{ matrix.job.target }}
       - uses: Swatinem/rust-cache@v2
       - name: Install cross
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
       - name: Build release binary
         run: cross build --locked --release --target ${{ matrix.job.target }}
       - name: Package release
         shell: bash
         run: |
-          BINARY=target/${{ matrix.job.target }}/release/netavark-plugin-pond
+          BINARY=target/${{ matrix.job.target }}/release/pond-netns
           RELEASE_NAME=netavark-plugin-pond-${GITHUB_REF/refs\/tags\//}-${{ matrix.job.os-name }}-${{ matrix.job.architecture }}
           mkdir assets
           tar czvf assets/$RELEASE_NAME.tar.gz $BINARY
