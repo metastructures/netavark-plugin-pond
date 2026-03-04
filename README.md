@@ -2,7 +2,7 @@
 
 [![Crates.io](https://img.shields.io/crates/v/netavark-plugin-pond.svg)](https://crates.io/crates/netavark-plugin-pond)
 [![Docs.rs](https://docs.rs/netavark-plugin-pond/badge.svg)](https://docs.rs/netavark-plugin-pond)
-[![CI](https://github.com/caguado/netavark-plugin-pond/workflows/CI/badge.svg)](https://github.com/caguado/netavark-plugin-pond/actions)
+[![CI](https://github.com/metastructures/netavark-plugin-pond/workflows/CI/badge.svg)](https://github.com/metastructures/netavark-plugin-pond/actions)
 
 ## Motivation
 

@@ -10,7 +10,7 @@
 ### Build (debug)
 
 ```shell
-git clone https://github.com/caguado/netavark-plugin-pond
+git clone https://github.com/metastructures/netavark-plugin-pond
 cd netavark-plugin-pond
 cargo build
 ```

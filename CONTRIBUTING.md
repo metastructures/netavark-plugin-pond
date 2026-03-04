@@ -8,7 +8,7 @@ wish to make by creating a new issue before making the change.
 ## Reporting issues
 
 Before reporting an issue on the
-[issue tracker](https://github.com/caguado/netavark-plugin-pond/issues),
+[issue tracker](https://github.com/metastructures/netavark-plugin-pond/issues),
 please check that it has not already been reported by searching for some related
 keywords.
 
@@ -19,7 +19,7 @@ Try to do one pull request per change.
 ### Updating the changelog
 
 Update the changes you have made in
-[CHANGELOG](https://github.com/caguado/netavark-plugin-pond/blob/main/CHANGELOG.md)
+[CHANGELOG](https://github.com/metastructures/netavark-plugin-pond/blob/main/CHANGELOG.md)
 file under the **Unreleased** section.
 
 Add the changes of your pull request to one of the following subsections,
@@ -42,18 +42,21 @@ If the required subsection does not exist yet under **Unreleased**, create it!
 This is no different than other Rust projects.
 
 ```shell
-git clone https://github.com/caguado/netavark-plugin-pond
+git clone https://github.com/metastructures/netavark-plugin-pond
 cd netavark-plugin-pond
 cargo test
 ```
 
 ### Useful Commands
 
-- Build and run release version:
+- Build and install as a netavark plugin (requires root):
 
   ```shell
-  cargo build --release && cargo run --release
+  cargo build --release
+  install -D -m 0755 target/release/pond-netns /usr/libexec/netavark/pond-netns
   ```
+
+  See [INSTALL.md](INSTALL.md) for the full plugin registration and verification steps.
 
 - Run Clippy:
 
