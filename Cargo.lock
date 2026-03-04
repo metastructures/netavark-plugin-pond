@@ -1072,9 +1072,9 @@ checksum = "1d87ecb2933e8aeadb3e3a02b828fed80a7528047e68b4f424523a0981a3a084"
 
 [[package]]
 name = "netavark"
-version = "1.17.1"
+version = "1.17.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e02a910862b96406957048754bcc2a9436f8bdf13a6fdaa4a7c60420b2e59b04"
+checksum = "e5765d9668f22ca7a99906c8744d370653e2dd3c0d980edf8781fd48f686291b"
 dependencies = [
  "anyhow",
  "chrono",
