@@ -1,3 +1,4 @@
+mod arp;
 mod driver;
 mod options;
 mod plumbing;

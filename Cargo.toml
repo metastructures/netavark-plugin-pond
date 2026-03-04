@@ -1,6 +1,6 @@
 [package]
 name = "netavark-plugin-pond"
-version = "0.1.1"
+version = "0.1.2"
 edition = "2021"
 description = "Netavark plugin to create a custom network whose backing underlay is just a kernel namespace with the objective that all containers share the same network infrastructure. This is simpler than the usual bridged broadcast domain where different containers share a single network interface."
 repository = "https://github.com/metastructures/netavark-plugin-pond"
@@ -14,6 +14,8 @@ netlink-packet-core = "0.8.1"
 netlink-packet-route = "0.25.1"
 netlink-sys = "0.8.5"
 nix = { version = "0.29", features = ["sched"] }
+pnet_datalink = "0.35.0"
+pnet_packet = "0.35.0"
 
 [profile.release]
 opt-level = 3

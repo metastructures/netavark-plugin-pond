@@ -10,6 +10,7 @@ use netavark::network::{
 };
 use netlink_packet_route::link::{InfoData, InfoKind, InfoVeth, LinkAttribute, LinkMessage};
 
+use super::arp;
 use super::options::PondOptions;
 use super::tuning;
 
@@ -185,6 +186,25 @@ pub fn provision(
         return Err(e);
     }
 
+    // --- ARP announcement ---
+    // Non-fatal: a failure to send (e.g. CAP_NET_RAW absent) only means the
+    // upstream ARP cache will self-heal on natural expiry.
+    if let Err(e) = arp::send_arp_request(
+        params.netns_path,
+        params.interface_name,
+        mac_bytes_from_link(&inner_up),
+        match params.host_ipnet {
+            IpNet::V4(n) => n.addr(),
+            _ => unreachable!(),
+        },
+        match params.gateway {
+            std::net::IpAddr::V4(gw) => gw,
+            _ => unreachable!(),
+        },
+    ) {
+        eprintln!("pond-netns: ARP announce skipped: {}", e);
+    }
+
     // --- Build StatusBlock ---
     let net_addr = types::NetAddress {
         gateway: Some(params.gateway),
@@ -309,6 +329,17 @@ fn extract_mac(link: &netlink_packet_route::link::LinkMessage) -> String {
         }
     }
     String::new()
+}
+
+fn mac_bytes_from_link(link: &netlink_packet_route::link::LinkMessage) -> [u8; 6] {
+    for attr in &link.attributes {
+        if let LinkAttribute::Address(addr) = attr {
+            if addr.len() >= 6 {
+                return [addr[0], addr[1], addr[2], addr[3], addr[4], addr[5]];
+            }
+        }
+    }
+    [0u8; 6]
 }
 
 /// Build a StatusBlock from the existing (already provisioned) state.
