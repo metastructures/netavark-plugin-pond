@@ -23,7 +23,7 @@ jobs:
       - name: Generate release notes
         run: git-cliff --current --strip header -o RELEASE_NOTES.md
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           body_path: RELEASE_NOTES.md
         env:
@@ -67,7 +67,7 @@ jobs:
           tar czvf assets/$RELEASE_NAME.tar.gz $BINARY
           shasum -a 256 assets/$RELEASE_NAME.tar.gz > assets/$RELEASE_NAME.sha256
       - name: Upload assets
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: assets/*
         env:
