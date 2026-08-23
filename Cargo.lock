@@ -1090,7 +1090,7 @@ dependencies = [
  "libc",
  "log",
  "mozim",
- "netlink-packet-core",
+ "netlink-packet-core 0.8.2",
  "netlink-packet-route",
  "netlink-sys",
  "nftables",
@@ -1116,7 +1116,7 @@ dependencies = [
  "crc32fast",
  "ipnet",
  "netavark",
- "netlink-packet-core",
+ "netlink-packet-core 0.9.0",
  "netlink-packet-route",
  "netlink-sys",
  "nix 0.31.3",
@@ -1134,6 +1134,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlink-packet-core"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d6e2daf9a8c2e21302714706860a0e6be02e03d17294ecc66b354ea7d4059dd"
+
+[[package]]
 name = "netlink-packet-route"
 version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1142,7 +1148,7 @@ dependencies = [
  "bitflags",
  "libc",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.8.2",
 ]
 
 [[package]]
@@ -1154,7 +1160,7 @@ dependencies = [
  "bytes",
  "futures",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.8.2",
  "netlink-sys",
  "thiserror 2.0.17",
 ]
@@ -1638,7 +1644,7 @@ checksum = "08fd15aa4c64c34d0b3178e45ec6dad313a9f02b193376d501668a7950264bb7"
 dependencies = [
  "futures",
  "log",
- "netlink-packet-core",
+ "netlink-packet-core 0.8.2",
  "netlink-packet-route",
  "netlink-proto",
  "netlink-sys",
