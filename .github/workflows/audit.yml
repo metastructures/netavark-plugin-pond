@@ -28,3 +28,9 @@ jobs:
         uses: rustsec/audit-check@v2.0.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+          # paste is unmaintained (no CVE); it is a build-time proc-macro only.
+          # It is pinned into the tree by the netavark 1.17.2 subtree
+          # (netlink-packet-core 0.8), which cannot be bumped while the runtime
+          # is pinned to netavark 1.10.3. Remove this ignore once netavark moves
+          # to a netlink-packet-core >=0.9 subtree. Tracked in #11.
+          ignore: RUSTSEC-2024-0436
